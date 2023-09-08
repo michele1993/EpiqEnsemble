@@ -15,8 +15,6 @@ import gym
 import envs.gymmb  # Register custom gym envs
 from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper
 
-
-# TODO: refactor this to accept a strongly typed Hydra configuration object.
 class TrainingLoop():
 
     def __init__(self,
@@ -140,7 +138,7 @@ class TrainingLoop():
             return CriticHeadEnsemble(self.d_action, self.d_state, n_units, n_layers, self.q_ensemble_s, activation, ln_rate, grad_clip, self.device,doubleQLearning)
 
     def _setup_Buffer(self, size):
-        return Buffer(self.d_action, self.d_state, size, self.normalizer, self.device, self.d_reward)
+        return Buffer(self.d_action, self.d_state, size, self.normalizer, self.device, self.d_reward) 
 
     # take a step in the environment and return torch.tensor instead of np.array
     def _env_step(self, action):
@@ -206,7 +204,7 @@ class TrainingLoop():
         for states, actions, rwds, state_deltas in self.m_buffer.sample_ensemble_batches(self.fm_ensemble_s, self.model_batch_s):
             fm_loss = self.f_model.update(states, actions, rwds, state_deltas) # Normalisation occurs inside f_model
             losses.append(fm_loss.item())
-
+        
         return losses
 
     def train(self):
@@ -248,7 +246,7 @@ class TrainingLoop():
             if s % self.model_training_freq ==0:
                 n_i = 0
                 # Update model n times independetly of the n of elements in the buffer (i.e. loop adjusted for n iter in inner loop in train_model())
-                while n_i < self.n_model_training_iter:
+                while n_i < self.n_model_training_iter: 
                     losses = self.train_model()
                     n_i += len(losses)
 

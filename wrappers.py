@@ -1,10 +1,8 @@
 import numpy as np
 import torch
 
-import gymnasium as gym
-
-
-# import gym
+import gym
+from packaging import version
 from utils import to_torch
 
 

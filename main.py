@@ -12,8 +12,6 @@ import gym
 import envs.gymmb  # Register custom gym envs
 from utils import setup_logger, boolean_string
 
-
-
 # Extract input variables:
 parser = argparse.ArgumentParser()
 parser.add_argument('--env-name','-e',type=str,nargs='?')

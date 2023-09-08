@@ -1,52 +1,33 @@
-import torch as t
+import numpy as np
+import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as opt
-
 from torch.distributions import Normal
 
-
 # Define linear activation
-# TODO: should this be a nn Module?
 def linear(x):
     return x
 
-
-# Define swish activation, which may work well for trying Taylor-TD stuff since
-# its second derivative is non-zero
-@t.jit.script
+# Define swish activation, which may work well for trying Taylor-TD stuff since its second derivative is non-zero
+@torch.jit.script
 def swish(x):
-    return x * t.sigmoid(x)
+    return x * torch.sigmoid(x)
 
-
-# TODO: why are we not using the standard SILU function?
-# nn.SiLU()
 class Swish(nn.Module):
     def forward(self, input):
         return swish(input)
 
-
 # Implement ensemble layers to perform a unique forward pass for all models
 class EnsembleLayer(nn.Module):
-    """An ensemble neural network layer.
 
-    This is like a batched version of a nn.Linear layer, followed by an
-    element-wise non-linearity.
-    """
-
-    def __init__(self, n_in, n_out, ensemble_size, non_linearity):
+    def __init__(self, n_in,n_out, ensemble_size, non_linearity):
         super().__init__()
 
-        weights = t.zeros(ensemble_size, n_in, n_out).float()
-        biases = t.zeros(ensemble_size, 1, n_out).float()
+        weights = torch.zeros(ensemble_size, n_in, n_out).float()
+        biases = torch.zeros(ensemble_size, 1, n_out).float()
 
-        # Initialise weights differently depending on the activation
-        # (taken from MAGE)
-        #
-        # TODO: do we understand why we use the different initialisations
-        # depending on the nonlinearity? Short of reading the individual
-        # papers, does the pytorch documentation of each of these
-        # nonlinearities explain this?
+        # Initialise weights differently depending on the activation (taken from MAGE)
         for weight in weights:
             weight.transpose_(1, 0)
 
@@ -71,63 +52,44 @@ class EnsembleLayer(nn.Module):
         elif non_linearity == 'leaky_relu':
             self.non_linearity = F.leaky_relu
         elif non_linearity == 'tanh':
-            self.non_linearity = t.tanh
+            self.non_linearity = torch.tanh
         elif non_linearity == 'linear':
             self.non_linearity = linear
 
     def forward(self, inp):
         # computation is done using batch matrix multiplication
         # hence forward pass through all models in the ensemble can be done in one call
-        return self.non_linearity(
-                t.baddbmm(self.biases, inp, self.weights))
+        return self.non_linearity(torch.baddbmm(self.biases, inp, self.weights))
 
 
 class ForwardModel(nn.Module):
     min_log_var = -5
     max_log_var = -1
 
-    def __init__(self, d_action: int, d_state: int, n_units: int,
-                 n_layers: int, ensemble_size: int, activation: str,
-                 device: str, ln_rate: float, weight_decay: float,
-                 grad_clip: float, d_reward, normalizer):
-        # TODO: refactor this. Having this many arguments is poor form. Pass an
-        # object as a parameter instead.
-        # TODO: is predicting the mean and variance of a Gaussian the most
-        # effective way to do density estimation? Perhaps parametrising the
-        # natural parameters of a Gaussian provides a better conditioned
-        # optimisation objective?
+    def __init__(self, d_action, d_state, n_units, n_layers, ensemble_size, activation, device, ln_rate, weight_decay, grad_clip, d_reward, normalizer):
+
         """
-        Predicts mean and variance of next state given state and action i.e
-        independent gaussians for each dimension of next state, using state and
-        action, delta of state is computed.
-
-        The mean of the delta is added to current state to get the mean of next
-        state.
-
-        There is a soft threshold on the output variance, forcing it to be in
-        the same range as the variance of the training data.
-
-        The thresholds are learnt in the form of bounds on variance and a small
-        penalty is used to contract the distance between the lower and upper
-        bounds.
-
+        Predicts mean and variance of next state given state and action i.e independent gaussians for each dimension of next state,
+        using state and  action, delta of state is computed.
+        The mean of the delta is added to current state to get the mean of next state.
+        there is a soft threshold on the output variance, forcing it to be in the same range as the variance of the training data.
+        the thresholds are learnt in the form of bounds on variance and a small penalty is used to contract the distance between the lower and upper bounds.
         loss components:
             1. minimize negative log-likelihood of data
-            2. (small weight) try to contract lower and upper bounds of
-               variance
+            2. (small weight) try to contract lower and upper bounds of variance
 
         Args:
             d_action (int): dimensionality of action
             d_state (int): dimensionality of state
             n_units (int): size or width of hidden layers
-            n_layers (int): number of hidden layers (number of
-                            non-lineatities). should be >= 2
+            n_layers (int): number of hidden layers (number of non-lineatities). should be >= 2
             ensemble_size (int): number of models in the ensemble
             activation (str): 'linear', 'swish' or 'leaky_relu'
             device (str): device of the model
             weight_decay: L2 weight decay on model parameters
             normalizer: class to normalise states, actions and rewards
         """
+
 
         assert n_layers >= 2, "minimum depth of model is 2"
 
@@ -137,14 +99,11 @@ class ForwardModel(nn.Module):
         # Initialise list of layers, based on Ensemble layer defined above
         for lyr_idx in range(n_layers + 1):
             if lyr_idx == 0:
-                lyr = EnsembleLayer(d_action + d_state, n_units, ensemble_size,
-                                    non_linearity=activation)
+                lyr = EnsembleLayer(d_action + d_state, n_units, ensemble_size, non_linearity=activation)
             elif 0 < lyr_idx < n_layers:
-                lyr = EnsembleLayer(n_units, n_units, ensemble_size,
-                                    non_linearity=activation)
-            else:  # output mean and std for both next_state and rwd
-                lyr = EnsembleLayer(n_units,  2*d_state + 2*d_reward,
-                                    ensemble_size, non_linearity='linear')
+                lyr = EnsembleLayer(n_units, n_units, ensemble_size, non_linearity=activation)
+            else:  # ask model to output mean and std for both next_state and rwd
+                lyr = EnsembleLayer(n_units,  2*d_state + 2*d_reward, ensemble_size, non_linearity='linear') 
             layers.append(lyr)
 
         self.layers = nn.Sequential(*layers)
@@ -160,10 +119,10 @@ class ForwardModel(nn.Module):
         self.ensemble_size = ensemble_size
         self.grad_clip = grad_clip
         self.device = device
+        
+        # Initialise optimiser
+        self.optimiser = opt.Adam(self.parameters(),ln_rate, weight_decay= weight_decay)
 
-        # Initialise optimiser
-        self.optimiser = opt.Adam(self.parameters(), ln_rate,
-                                  weight_decay=weight_decay)
 
     
     def normalise_model_inputs(self, states, actions):
@@ -176,12 +135,12 @@ class ForwardModel(nn.Module):
             actions = self.normalizer.normalize_actions(actions)
         return states, actions
 
-    def normalise_rwd(self, rwd: t.Tensor) -> t.Tensor:
+    def normalise_rwd(self,rwd):
         rwd = rwd.to(self.device)
 
         if self.normalizer is not None:
             rwd = self.normalizer.normalize_rewards(rwd)
-        return rwd
+        return rwd        
 
     def normalise_model_targets(self, state_deltas):
         state_deltas = state_deltas.to(self.device)
@@ -189,8 +148,8 @@ class ForwardModel(nn.Module):
         if self.normalizer is not None:
             state_deltas = self.normalizer.normalize_state_deltas(state_deltas)
         return state_deltas
-
-    def deNormalise_model_outputs(self, delta_mean, rwd_mean, delta_var, rwd_var):
+    
+    def deNormalise_model_outputs(self, delta_mean,rwd_mean, delta_var, rwd_var):
 
         # denormalize to return in raw state space
         if self.normalizer is not None:
@@ -229,10 +188,9 @@ class ForwardModel(nn.Module):
     # Forward assuming a corresponding state and action for each ensamble
     def forward(self, states, actions):
         """
-        Predict next state mean and variance, assuming a entry in state and
-        action for each ensemble - i.e., see Args.
-        Takes in raw states and actions and internally normalizes it. predict
-        rwd mean and variance.
+        predict next state mean and variance, assuming a entry in state and action for each ensemble - i.e., see Args.
+        takes in raw states and actions and internally normalizes it.
+        predict rwd mean and variance.
 
         Args:
             states (torch Tensor[ensemble_size, batch size, dim_state])
@@ -248,7 +206,7 @@ class ForwardModel(nn.Module):
             next state means (torch Tensor[ensemble_size, batch size, dim_state])
             next state variances (torch Tensor[ensemble_size, batch size, dim_state])
         """
-
+        
         # normalise states and actions
         normalized_states, normalized_actions = self.normalise_model_inputs(states, actions)
         # predict change in state (in terms of mean and var in normalised space - since trained with normalised targets, see loss)
@@ -262,24 +220,24 @@ class ForwardModel(nn.Module):
 
         return next_state_mean, rwd_mean, delta_var, rwd_var
 
-    def forward_all(self, states, actions):
-        """
-        Predict next state mean and variance of a *batch* of states and actions
-        for all models in the ensemble.
 
     
     def forward_all(self,states,actions):
 
+        """
+        predict next state mean and variance of a batch of states and actions for all models in the ensemble.
+        takes in raw states and actions and internally normalizes it.
         Args:
             states (torch Tensor[batch size, dim_state])
             actions (torch Tensor[batch size, dim_action])
-
         Returns:
             next state means (torch Tensor[batch size, ensemble_size, dim_state])
             rwd means (torch Tensor[batch size, ensemble_size, dim_reward])
             next state variances (torch Tensor[batch size, ensemble_size, dim_state])
             rwd variances (torch Tensor[batch size, ensemble_size, dim_reward])
         """
+
+
         states = states.to(self.device)
         actions = actions.to(self.device)
 
@@ -287,14 +245,14 @@ class ForwardModel(nn.Module):
         states = states.unsqueeze(0).repeat(self.ensemble_size, 1, 1)
         actions = actions.unsqueeze(0).repeat(self.ensemble_size, 1, 1)
 
-        # Predict delta_state in raw state space (see forward())
+        # Predict delta_state in raw state space (see forward()) 
         next_state_means, rwd_means, next_state_vars, rwd_vars = self(states, actions) # size=(ensemble_s,batch_s,state_d)
 
         return next_state_means, rwd_means, next_state_vars, rwd_vars
 
-    def sample_SingleEnsemble(self, states, actions):
+    def sample_SingleEnsemble(self, states,actions):
 
-        """ Returns a distribution for a single model in the ensemble (selected at random) across batch
+        """ Returns a distribution for a single model in the ensemble (selected at random) across batch 
         Args:
             states: [batch_size, d_state]
             actions: [ batch_size, d_action]
@@ -304,8 +262,8 @@ class ForwardModel(nn.Module):
         # Get next state distribution for all components in the ensemble
         next_state_means, rwd_means, next_state_vars, rwd_vars = self.forward_all(states, actions)  # shape: [ensemble_size, batch_size, d_state]
 
-        i = t.randint(self.ensemble_size, size=(batch_size,), device=self.device)
-        j = t.arange(batch_size, device=self.device)
+        i = torch.randint(self.ensemble_size, size=(batch_size,), device=self.device)
+        j = torch.arange(batch_size, device=self.device)
 
         # Select a different ensemble prediction for each element in the batch (i.e. j spans over entire batch)
         s_mean = next_state_means[i, j]
@@ -364,14 +322,16 @@ class ForwardModel(nn.Module):
         delta_mu, rwd_mu, delta_var, rwd_var = self.forward_pass(states, actions)      # delta and variance
 
         # negative log likelihood for both deltas and rewards
-        delta_loss = (delta_mu - delta_targets) ** 2 / delta_var + t.log(delta_var)
-        rwd_loss = (rwd_mu - rwd_targets) ** 2 / rwd_var + t.log(rwd_var)
+        delta_loss = (delta_mu - delta_targets) ** 2 / delta_var + torch.log(delta_var)
+        rwd_loss = (rwd_mu - rwd_targets) ** 2 / rwd_var + torch.log(rwd_var)
 
-        overall_loss = t.mean(delta_loss) + t.mean(rwd_loss)
+        overall_loss = torch.mean(delta_loss) + torch.mean(rwd_loss)
 
         self.optimiser.zero_grad()
         overall_loss.backward()
-        t.nn.utils.clip_grad_value_(self.parameters(), clip_value=self.grad_clip)
+        torch.nn.utils.clip_grad_value_(self.parameters(), clip_value=self.grad_clip) 
         self.optimiser.step()
 
         return overall_loss.detach()
+
+

@@ -1,7 +1,9 @@
 import copy
 import torch
-from QEnsemble import CriticEnsemble
-
+import torch.nn as nn
+import torch.nn.functional as F
+from actor import Actor 
+from QEnsemble import CriticEnsemble 
 
 class TD3():
      def __init__(
@@ -27,9 +29,8 @@ class TD3():
         self.d_state = d_state
         self.actor = actor
         self.actor_target = copy.deepcopy(self.actor)
-        # ensure target net does not require grad
-        self.freeze_params(self.actor_target)
-
+        self.freeze_params(self.actor_target) # ensure target net does not require grad
+        
         self.fm_ensemble_s = fm_ensemble_s
         self.q_ensemble_s = q_ensemble_s
         self.batch_s = batch_s
@@ -119,7 +120,7 @@ class TD3():
 
             det_a = self.actor(states)
             # Compute actor loss
-            q = self.critic.forward_all(states, det_a)
+            q = self.critic.forward_all(states, det_a)  
             q1, q2 = torch.split(q, self.q_ensemble_s, dim=0) # divide predictions from two targets Q ensembles
             targ_q = torch.min(q1,q2)
 
