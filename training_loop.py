@@ -20,6 +20,7 @@ class TrainingLoop():
     def __init__(self,
               n_total_steps,
               n_warmup_steps,
+              ensemble_size,   
               exploratory_steps,
               n_dyna_transitions,  
               env_name,
@@ -31,12 +32,10 @@ class TrainingLoop():
               fm_model_training_freq,
               fm_n_units,
               fm_n_layers,
-              fm_ensemble_s,
               fm_activation,
               fm_lr,
               q_n_units,
               q_n_layers,
-              q_ensemble_s,
               q_activation,
               q_lr,
               a_n_units,
@@ -69,18 +68,19 @@ class TrainingLoop():
         self.d_state = self.trn_env.observation_space.shape[0]
         self.d_reward = d_reward
         self.gamma = gamma
-        self.fm_ensemble_s = fm_ensemble_s
-        self.q_ensemble_s = q_ensemble_s
+        ## Key: set all ensembles to the same value for 1-to-1 pairing 
+        self.fm_ensemble_s = ensemble_size
+        self.q_ensemble_s = ensemble_size
+        self.act_ensemble_s = ensemble_size
         self.batch_s = batch_s
         self.model_batch_s = fm_model_batch_s
         self.n_dyna_transitions = n_dyna_transitions
         self.model_training_freq = fm_model_training_freq        
         self.n_model_training_iter = fm_n_model_training_iter
-        self.q_model = None
         self.actor = None
 
 
-        logging.info(f'Env: {env_name}, Alg: {alg_name}, N steps: {n_total_steps}, Q_lr: {q_lr}, Actor_lr: {a_lr}, Explor Noise: {expl_noise}, Ensemble size: {fm_ensemble_s}, Full ensemble: {full_ensemble}')
+        logging.info(f'Env: {env_name}, Alg: {alg_name}, N steps: {n_total_steps}, Q_lr: {q_lr}, Actor_lr: {a_lr}, Explor Noise: {expl_noise}, Ensemble size: {ensemble_size}, Full ensemble: {full_ensemble}')
 
         if normalize_transitions:
             self.normalizer = TransitionNormalizer(self.d_state,self.d_action,self.device)
@@ -89,7 +89,7 @@ class TrainingLoop():
 
         self.m_buffer = self._setup_Buffer(size=buffer_s)
 
-        self.actor = self._setup_Actor(n_units=a_n_units, n_layers=a_n_layers, activation=a_activation, ln_rate=a_lr, exploration_noise=expl_noise, grad_clip=grad_clip)
+        self.actor = self._setup_Actor(n_units=a_n_units, n_layers=a_n_layers, ensemble_size=act_ensemble_s, activation=a_activation, ln_rate=a_lr, exploration_noise=expl_noise, grad_clip=grad_clip)
 
         self.critic = self._setup_Critic(n_units=q_n_units, n_layers=q_n_layers, activation=q_activation, ln_rate=q_lr, grad_clip=grad_clip, doubleQLearning=doubleQLearning, full_ensemble=full_ensemble)
 
@@ -126,9 +126,9 @@ class TrainingLoop():
 
         return ForwardModel(self.d_action, self.d_state,n_units, n_layers, ensemble_size, activation, self.device, ln_rate, weight_decay, grad_clip,  self.d_reward,self.normalizer)
 
-    def _setup_Actor(self, n_units, n_layers, activation, ln_rate, exploration_noise, grad_clip):
+    def _setup_Actor(self, n_units, n_layers, ensemble_size, activation, ln_rate, exploration_noise, grad_clip):
 
-        return Actor(self.d_action, self.d_state, n_units, n_layers, activation, ln_rate, exploration_noise, grad_clip, self.device, self.normalizer)
+        return ActorEnsemble(self.d_action, self.d_state, n_units, n_layers, ensemble_size, activation, ln_rate, exploration_noise, grad_clip, self.device, self.normalizer)
 
     def _setup_Critic(self, n_units, n_layers, activation, ln_rate, grad_clip, doubleQLearning, full_ensemble):
 

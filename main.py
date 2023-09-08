@@ -42,6 +42,7 @@ save_results = args.save
 full_q_ensemble = args.full_ensemb
 
 # -------- Variables ------------------
+ensemble_size = 10
 exploratory_steps = n_warmup_steps # n of steps using a random uniform policy
 buffer_s = n_total_steps
 batch_s = 1024
@@ -52,7 +53,6 @@ normalize_transitions = True
 # Forward model:
 fm_n_units = 512
 fm_n_layers = 4
-fm_ensemble_s = 8
 fm_activation = 'swish'
 fm_lr = 1e-4
 fm_model_training_freq = 25 # how often model updated (in terms of steps in real env)
@@ -62,7 +62,6 @@ fm_n_model_training_iter = 120 # n of model update every time the model is updat
 # Q model:
 q_n_units = 400
 q_n_layers = 3 #2
-q_ensemble_s = fm_ensemble_s
 q_activation = 'swish'
 
 # Actor:
@@ -97,7 +96,7 @@ if seed is not None:
 
 
 # Initialise training loop
-train_loop = TrainingLoop(n_total_steps=n_total_steps, n_warmup_steps=n_warmup_steps, exploratory_steps = exploratory_steps, n_dyna_transitions=n_dyna_transitions, env_name=env_name, device=device, buffer_s=buffer_s,batch_s=batch_s,fm_model_batch_s=fm_model_batch_s, fm_n_model_training_iter=fm_n_model_training_iter, fm_model_training_freq=fm_model_training_freq, fm_n_units=fm_n_units, fm_n_layers=fm_n_layers, fm_ensemble_s=fm_ensemble_s, fm_activation=fm_activation, fm_lr=fm_lr, q_n_units=q_n_units, q_n_layers=q_n_layers, q_ensemble_s=q_ensemble_s, q_activation=q_activation, q_lr=q_lr, a_n_units=a_n_units, a_n_layers=a_n_layers, a_activation=a_activation, a_lr=a_lr, alg_name=alg_name, normalize_transitions=normalize_transitions, expl_noise=expl_noise, full_ensemble=full_q_ensemble) 
+train_loop = TrainingLoop(n_total_steps=n_total_steps, n_warmup_steps=n_warmup_steps, ensemble_size=ensemble_size, exploratory_steps = exploratory_steps, n_dyna_transitions=n_dyna_transitions, env_name=env_name, device=device, buffer_s=buffer_s,batch_s=batch_s,fm_model_batch_s=fm_model_batch_s, fm_n_model_training_iter=fm_n_model_training_iter, fm_model_training_freq=fm_model_training_freq, fm_n_units=fm_n_units, fm_n_layers=fm_n_layers, fm_activation=fm_activation, fm_lr=fm_lr, q_n_units=q_n_units, q_n_layers=q_n_layers, q_activation=q_activation, q_lr=q_lr, a_n_units=a_n_units, a_n_layers=a_n_layers, a_activation=a_activation, a_lr=a_lr, alg_name=alg_name, normalize_transitions=normalize_transitions, expl_noise=expl_noise, full_ensemble=full_q_ensemble) 
 
 # train algorithm
 logging.info('Training started')

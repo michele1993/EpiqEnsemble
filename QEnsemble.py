@@ -5,8 +5,6 @@ import torch.nn as nn
 from modelEnsemble import EnsembleLayer 
 import torch.optim as opt
 
-
-
 class CriticEnsemble(nn.Module):
 
     def __init__(self, d_action, d_state, n_units, n_layers, ensemble_size, activation,ln_rate, grad_clip, device, doubleQLearning=True):
@@ -88,7 +86,6 @@ class CriticEnsemble(nn.Module):
         Returns:
                 Q prediction for each ensemble
         """
-
 
         states = states.to(self.device)
         actions = actions.to(self.device)
