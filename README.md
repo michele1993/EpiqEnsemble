@@ -1,3 +1,5 @@
+# Epiq Ensemble, epistemic uncertainty in Q-function. 
+
 **Overview**
 
 Here, I use an ensemble approach to approximate a distribution over value fuctions as well as transition models to get an estimate of the epistemic uncertainty over value predictions.
